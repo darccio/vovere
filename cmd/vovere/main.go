@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -13,10 +14,14 @@ import (
 	"github.com/go-rod/rod"
 )
 
+const (
+	scheme = "vovere"
+)
+
 var (
-	errFileSchemeRequired = errors.New("URL must be a file URL")
-	errNoURL              = errors.New("URL is required")
-	errUnknownCommand     = errors.New("unknown command")
+	errNoURL          = errors.New("URL is required")
+	errSchemeRequired = fmt.Errorf("URL must be a %q URL", scheme)
+	errUnknownCommand = errors.New("unknown command")
 )
 
 func main() {
@@ -45,7 +50,7 @@ func main() {
 		err = add(defaultRepo, url, os.Args[3])
 	// case "tag"
 	// case "link"
-	// case "pop" // pip random item, ask to discard or keep; if kept, add to counter
+	// case "pop" // pop random item, ask to discard or keep; if kept, add to counter
 	// case "archive"
 	// case "note"
 	default:
@@ -92,8 +97,8 @@ func getTitle(url *url.URL) (string, error) {
 }
 
 func addPath(repo *vovere.Repository, url *url.URL, fpath string) error {
-	if url.Scheme != "file" {
-		return errFileSchemeRequired
+	if url.Scheme != scheme {
+		return errSchemeRequired
 	}
 	i := &vovere.Item{
 		URI: url,
