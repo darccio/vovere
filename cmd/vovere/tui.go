@@ -35,6 +35,8 @@ func newTUIModel() tuiModel {
 func (m tuiModel) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
+		// TODO: add Lipgloss styling
+		// TODO: refactor code to reduce coupling
 		func() tea.Msg {
 			msg, err := m.handler()
 			if err != nil {
