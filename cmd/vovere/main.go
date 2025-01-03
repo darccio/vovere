@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"dario.cat/vovere/internal/vovere"
+
 	"github.com/adrg/xdg"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/go-rod/rod"
 )
 
@@ -28,42 +30,46 @@ func main() {
 	if len(os.Args) < 2 {
 		os.Exit(1)
 	}
-	var err error
-	switch os.Args[1] {
-	case "add":
+	m := newTUIModel()
+	m.handler = func() (string, error) {
 		var (
-			url         *url.URL
-			defaultRepo *vovere.Repository
+			url *url.URL
+			err error
+			msg string
 		)
-		url, err = vovere.ParseURL(os.Args[2])
-		if err != nil {
-			log.Fatal(err)
+		switch os.Args[1] {
+		case "add":
+			url, err = vovere.ParseURL(os.Args[2])
+			if err != nil {
+				return "", err
+			}
+			defaultRepo := &vovere.Repository{
+				Root: xdg.UserDirs.Documents,
+			}
+			var fpath string
+			if len(os.Args) >= 4 {
+				fpath = os.Args[3]
+			}
+			msg, err = add(defaultRepo, url, fpath)
+		// case "tag"
+		// case "link"
+		// case "pop" // pop random item, ask to discard or keep; if kept, add to counter
+		// case "archive"
+		// case "note"
+		default:
+			err = errUnknownCommand
 		}
-
-		defaultRepo = &vovere.Repository{
-			Root: xdg.UserDirs.Documents,
-		}
-		if len(os.Args) < 4 {
-			err = add(defaultRepo, url, "")
-			break
-		}
-		err = add(defaultRepo, url, os.Args[3])
-	// case "tag"
-	// case "link"
-	// case "pop" // pop random item, ask to discard or keep; if kept, add to counter
-	// case "archive"
-	// case "note"
-	default:
-		err = errUnknownCommand
+		return msg, err
 	}
-	if err != nil {
+	p := tea.NewProgram(m)
+	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func add(repo *vovere.Repository, url *url.URL, fpath string) error {
+func add(repo *vovere.Repository, url *url.URL, fpath string) (string, error) {
 	if url == nil {
-		return errNoURL
+		return "", errNoURL
 	}
 	fpath = strings.TrimSpace(fpath)
 	if fpath == "" {
@@ -72,44 +78,43 @@ func add(repo *vovere.Repository, url *url.URL, fpath string) error {
 	return addPath(repo, url, filepath.Clean(fpath))
 }
 
-func addBookmark(repo *vovere.Repository, url *url.URL) error {
+func addBookmark(repo *vovere.Repository, url *url.URL) (string, error) {
 	i := &vovere.Item{
 		URI:        url,
 		Collection: "Bookmarks",
 	}
 	title, err := getTitle(url)
 	if err != nil {
-		return err
+		return "", err
 	}
 	bm := &vovere.Bookmark{
 		URI:   url,
 		Title: title,
 	}
 	if err := repo.Store(i, "bookmark.json", bm); err != nil {
-		return err
+		return "", err
 	}
-	log.Printf("added bookmark %q", title)
-	return nil
+	return fmt.Sprintf("added bookmark %q", title), nil
 }
 
 func getTitle(url *url.URL) (string, error) {
 	browser := rod.New().MustConnect()
 	defer browser.MustClose()
 
-	page := browser.MustPage(url.String()).MustWaitStable()
+	page := browser.MustPage(url.String()).MustWaitLoad()
 	return page.MustElement("title").Text()
 }
 
-func addPath(repo *vovere.Repository, url *url.URL, fpath string) error {
+func addPath(repo *vovere.Repository, url *url.URL, fpath string) (string, error) {
 	if url.Scheme != scheme {
-		return errSchemeRequired
+		return "", errSchemeRequired
 	}
 	i := &vovere.Item{
 		URI: url,
 	}
 	r, err := os.OpenFile(fpath, os.O_RDONLY, 0)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer r.Close()
 	fname := filepath.Base(fpath)
@@ -117,8 +122,7 @@ func addPath(repo *vovere.Repository, url *url.URL, fpath string) error {
 		Reader: r,
 	}
 	if err = repo.Store(i, fname, f); err != nil {
-		return err
+		return "", err
 	}
-	log.Printf("added file %q", fpath)
-	return nil
+	return fmt.Sprintf("added file %q", fpath), nil
 }
