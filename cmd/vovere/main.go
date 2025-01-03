@@ -85,7 +85,11 @@ func addBookmark(repo *vovere.Repository, url *url.URL) error {
 		URI:   url,
 		Title: title,
 	}
-	return repo.Store(i, "bookmark.json", bm)
+	if err := repo.Store(i, "bookmark.json", bm); err != nil {
+		return err
+	}
+	log.Printf("added bookmark %q", title)
+	return nil
 }
 
 func getTitle(url *url.URL) (string, error) {
@@ -112,5 +116,9 @@ func addPath(repo *vovere.Repository, url *url.URL, fpath string) error {
 	f := &vovere.File{
 		Reader: r,
 	}
-	return repo.Store(i, fname, f)
+	if err = repo.Store(i, fname, f); err != nil {
+		return err
+	}
+	log.Printf("added file %q", fpath)
+	return nil
 }
