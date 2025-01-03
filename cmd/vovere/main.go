@@ -69,7 +69,7 @@ func add(repo *vovere.Repository, url *url.URL, fpath string) error {
 	if fpath == "" {
 		return addBookmark(repo, url)
 	}
-	return addPath(repo, url, fpath)
+	return addPath(repo, url, filepath.Clean(fpath))
 }
 
 func addBookmark(repo *vovere.Repository, url *url.URL) error {
