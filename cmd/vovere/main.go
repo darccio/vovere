@@ -21,6 +21,8 @@ const (
 )
 
 var (
+	errMissingAddArgs = errors.New("missing arguments for add: URL and optional file path")
+	errMissingJotArgs = errors.New("missing arguments for jot: note addressed with vovere URL")
 	errNoURL          = errors.New("URL is required")
 	errSchemeRequired = fmt.Errorf("URL must be a %q URL", scheme)
 	errUnknownCommand = errors.New("unknown command")
@@ -37,25 +39,37 @@ func main() {
 			err error
 			msg string
 		)
+		defaultRepo := &vovere.Repository{
+			Root: xdg.UserDirs.Documents,
+		}
 		switch os.Args[1] {
 		case "add":
+			if len(os.Args) < 3 {
+				return "", errMissingAddArgs
+			}
 			url, err = vovere.ParseURL(os.Args[2])
 			if err != nil {
 				return "", err
-			}
-			defaultRepo := &vovere.Repository{
-				Root: xdg.UserDirs.Documents,
 			}
 			var fpath string
 			if len(os.Args) >= 4 {
 				fpath = os.Args[3]
 			}
 			msg, err = add(defaultRepo, url, fpath)
+		case "jot":
+			if len(os.Args) < 3 {
+				return "", errMissingJotArgs
+			}
+			url, err = vovere.ParseURL(os.Args[2])
+			if err != nil {
+				return "", err
+			}
+			msg, err = jot(defaultRepo, url)
+		// case "journal"
 		// case "tag"
 		// case "link"
 		// case "pop" // pop random item, ask to discard or keep; if kept, add to counter
 		// case "archive"
-		// case "note"
 		default:
 			err = errUnknownCommand
 		}
@@ -101,6 +115,7 @@ func getTitle(url *url.URL) (string, error) {
 	browser := rod.New().MustConnect()
 	defer browser.MustClose()
 
+	// TODO: investigate why it hangs with https://cameronboehmer.com/building-a-polite-and-fast-web-crawler.html
 	page := browser.MustPage(url.String()).MustWaitLoad()
 	return page.MustElement("title").Text()
 }
@@ -125,4 +140,12 @@ func addPath(repo *vovere.Repository, url *url.URL, fpath string) (string, error
 		return "", err
 	}
 	return fmt.Sprintf("added file %q", fpath), nil
+}
+
+func jot(repo *vovere.Repository, url *url.URL) (string, error) {
+	if url.Scheme != scheme {
+		return "", errSchemeRequired
+	}
+	// TODO: create new note if it doesn't exist
+	return "", nil
 }
