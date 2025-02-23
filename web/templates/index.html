@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vovere</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Alpine.js -->
+    <script src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Vovere</h1>
+            <p class="text-gray-600">Personal Information Manager</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <!-- Notes Section -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Notes</h2>
+                <button 
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                    hx-post="/api/items/note"
+                    hx-trigger="click"
+                    hx-target="#editor-container"
+                    hx-swap="innerHTML"
+                >
+                    New Note
+                </button>
+                <div 
+                    id="notes-list" 
+                    class="mt-4 space-y-2"
+                    hx-get="/api/items/note"
+                    hx-trigger="load"
+                >
+                    <!-- Notes will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Bookmarks Section -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Bookmarks</h2>
+                <button 
+                    class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                    hx-post="/api/items/bookmark"
+                    hx-trigger="click"
+                    hx-target="#editor-container"
+                    hx-swap="innerHTML"
+                >
+                    New Bookmark
+                </button>
+                <div 
+                    id="bookmarks-list" 
+                    class="mt-4 space-y-2"
+                    hx-get="/api/items/bookmark"
+                    hx-trigger="load"
+                >
+                    <!-- Bookmarks will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Tasks Section -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Tasks</h2>
+                <button 
+                    class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600"
+                    hx-post="/api/items/task"
+                    hx-trigger="click"
+                    hx-target="#editor-container"
+                    hx-swap="innerHTML"
+                >
+                    New Task
+                </button>
+                <div 
+                    id="tasks-list" 
+                    class="mt-4 space-y-2"
+                    hx-get="/api/items/task"
+                    hx-trigger="load"
+                >
+                    <!-- Tasks will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Workstreams Section -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Workstreams</h2>
+                <button 
+                    class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
+                    hx-post="/api/items/workstream"
+                    hx-trigger="click"
+                    hx-target="#editor-container"
+                    hx-swap="innerHTML"
+                >
+                    New Workstream
+                </button>
+                <div 
+                    id="workstreams-list" 
+                    class="mt-4 space-y-2"
+                    hx-get="/api/items/workstream"
+                    hx-trigger="load"
+                >
+                    <!-- Workstreams will be loaded here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Editor Container -->
+        <div id="editor-container" class="mt-8">
+            <!-- Editor will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        // Handle successful item creation
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.successful) {
+                if (evt.detail.requestConfig.path.endsWith('/content')) {
+                    // Show save indicator
+                    const indicator = document.createElement('div');
+                    indicator.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow';
+                    indicator.textContent = 'Saved';
+                    document.body.appendChild(indicator);
+                    setTimeout(() => indicator.remove(), 2000);
+                } else if (evt.detail.requestConfig.method === 'POST') {
+                    // Refresh the list after creating a new item
+                    const type = evt.detail.requestConfig.path.split('/').pop();
+                    htmx.trigger(`#${type}s-list`, 'load');
+                } else if (evt.detail.requestConfig.method === 'DELETE') {
+                    // Clear editor if the deleted item was being edited
+                    const editorContainer = document.getElementById('editor-container');
+                    const editorHeader = editorContainer.querySelector('h3');
+                    if (editorHeader) {
+                        const itemId = editorContainer.querySelector('.text-gray-500').textContent.replace('ID: ', '');
+                        const deletedId = evt.detail.requestConfig.path.split('/').pop();
+                        if (itemId === deletedId) {
+                            editorContainer.innerHTML = '';
+                        }
+                    }
+                    // Show delete indicator
+                    const indicator = document.createElement('div');
+                    indicator.className = 'fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow';
+                    indicator.textContent = 'Deleted';
+                    document.body.appendChild(indicator);
+                    setTimeout(() => indicator.remove(), 2000);
+                }
+            }
+        });
+
+        // Handle tab key in textarea
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab' && e.target.tagName === 'TEXTAREA') {
+                e.preventDefault();
+                const start = e.target.selectionStart;
+                const end = e.target.selectionEnd;
+                e.target.value = e.target.value.substring(0, start) + '    ' + e.target.value.substring(end);
+                e.target.selectionStart = e.target.selectionEnd = start + 4;
+            }
+        });
+    </script>
+</body>
+</html> 
