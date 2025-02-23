@@ -13,112 +13,203 @@
     
     <!-- Alpine.js -->
     <script src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js" defer></script>
+
+    <style>
+        [x-cloak] { display: none !important; }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+        }
+    </style>
 </head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <header class="mb-8">
-            <h1 class="text-4xl font-bold text-gray-900">Vovere</h1>
-            <p class="text-gray-600">Personal Information Manager</p>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <!-- Notes Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md">
-                <h2 class="text-xl font-semibold mb-4">Notes</h2>
-                <button 
-                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                    hx-post="/api/items/note"
-                    hx-trigger="click"
-                    hx-target="#editor-container"
-                    hx-swap="innerHTML"
-                >
-                    New Note
-                </button>
-                <div 
-                    id="notes-list" 
-                    class="mt-4 space-y-2"
-                    hx-get="/api/items/note"
-                    hx-trigger="load"
-                >
-                    <!-- Notes will be loaded here -->
+<body class="bg-white">
+    <div class="min-h-screen flex flex-col" x-data="{ sidebarOpen: true }">
+        <!-- Breadcrumb -->
+        <nav class="bg-white border-b" aria-label="Breadcrumb">
+            <div class="px-4 py-3">
+                <div id="breadcrumb" class="flex items-center space-x-2 text-sm">
+                    <!-- Breadcrumb items will be loaded here -->
                 </div>
             </div>
+        </nav>
 
-            <!-- Bookmarks Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md">
-                <h2 class="text-xl font-semibold mb-4">Bookmarks</h2>
-                <button 
-                    class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-                    hx-post="/api/items/bookmark"
-                    hx-trigger="click"
-                    hx-target="#editor-container"
-                    hx-swap="innerHTML"
-                >
-                    New Bookmark
-                </button>
-                <div 
-                    id="bookmarks-list" 
-                    class="mt-4 space-y-2"
-                    hx-get="/api/items/bookmark"
-                    hx-trigger="load"
-                >
-                    <!-- Bookmarks will be loaded here -->
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Sidebar -->
+            <aside 
+                class="w-64 bg-white border-r flex flex-col sidebar transition-transform md:translate-x-0"
+                :class="{ 'open': sidebarOpen }"
+            >
+                <!-- Repository Header -->
+                <div class="p-4 border-b">
+                    <div class="flex items-center justify-between">
+                        <h2 class="font-semibold truncate" x-text="localStorage.getItem('currentRepo')?.split('/').pop() || 'Repository'"></h2>
+                        <button
+                            class="text-gray-500 hover:text-red-500"
+                            @click="document.cookie = 'repository=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'; window.location.href = '/api/repository'"
+                            title="Close Repository"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Tasks Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md">
-                <h2 class="text-xl font-semibold mb-4">Tasks</h2>
-                <button 
-                    class="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600"
-                    hx-post="/api/items/task"
-                    hx-trigger="click"
-                    hx-target="#editor-container"
-                    hx-swap="innerHTML"
-                >
-                    New Task
-                </button>
-                <div 
-                    id="tasks-list" 
-                    class="mt-4 space-y-2"
-                    hx-get="/api/items/task"
-                    hx-trigger="load"
-                >
-                    <!-- Tasks will be loaded here -->
+                <!-- Scrollable Content -->
+                <div class="flex-1 overflow-y-auto">
+                    <!-- Creation Dropdown -->
+                    <div class="p-4" x-data="{ showDropdown: false }" @click.away="showDropdown = false">
+                        <div class="relative z-10">
+                            <button 
+                                class="w-full flex items-center justify-between px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                                @click="showDropdown = !showDropdown"
+                            >
+                                <span>New Note</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div 
+                                x-show="showDropdown"
+                                x-cloak
+                                class="absolute w-full mt-1 bg-white border rounded shadow-lg"
+                            >
+                                <button 
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    hx-post="/api/items/note"
+                                    hx-target="#content"
+                                    hx-swap="innerHTML"
+                                    @click="showDropdown = false"
+                                >Note</button>
+                                <button 
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    hx-post="/api/items/bookmark"
+                                    hx-target="#content"
+                                    hx-swap="innerHTML"
+                                    @click="showDropdown = false"
+                                >Bookmark</button>
+                                <button 
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    hx-post="/api/items/task"
+                                    hx-target="#content"
+                                    hx-swap="innerHTML"
+                                    @click="showDropdown = false"
+                                >Task</button>
+                                <button 
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    hx-post="/api/items/workstream"
+                                    hx-target="#content"
+                                    hx-swap="innerHTML"
+                                    @click="showDropdown = false"
+                                >Workstream</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="p-4 border-t">
+                        <div class="relative">
+                            <input 
+                                type="text"
+                                class="w-full px-4 py-2 pr-8 border rounded"
+                                placeholder="Search..."
+                                hx-get="/api/search"
+                                hx-trigger="input changed delay:500ms"
+                                hx-target="#content"
+                            >
+                            <div class="absolute right-3 top-2.5 text-gray-400">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <!-- Search Filters -->
+                        <div class="flex flex-wrap gap-2 mt-2">
+                            <button class="px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200">type:note</button>
+                            <button class="px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200">type:bookmark</button>
+                            <button class="px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200">type:task</button>
+                        </div>
+                    </div>
+
+                    <!-- Inbox -->
+                    <div class="p-4 border-t">
+                        <button 
+                            class="w-full flex items-center justify-between px-4 py-2 text-left hover:bg-gray-50 rounded"
+                            hx-get="/api/inbox"
+                            hx-target="#content"
+                        >
+                            <span>Inbox</span>
+                            <span 
+                                class="bg-indigo-600 text-white text-xs px-2 py-1 rounded-full"
+                                hx-get="/api/inbox/count"
+                                hx-trigger="load"
+                                hx-swap="innerHTML"
+                            >0</span>
+                        </button>
+                    </div>
+
+                    <!-- Tags -->
+                    <div class="p-4 border-t">
+                        <h3 class="font-medium mb-2">Tags</h3>
+                        <div class="flex flex-wrap gap-2" id="tag-cloud" hx-get="/api/tags" hx-trigger="load">
+                            <!-- Tags will be loaded here -->
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </aside>
 
-            <!-- Workstreams Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md">
-                <h2 class="text-xl font-semibold mb-4">Workstreams</h2>
-                <button 
-                    class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
-                    hx-post="/api/items/workstream"
-                    hx-trigger="click"
-                    hx-target="#editor-container"
-                    hx-swap="innerHTML"
-                >
-                    New Workstream
-                </button>
-                <div 
-                    id="workstreams-list" 
-                    class="mt-4 space-y-2"
-                    hx-get="/api/items/workstream"
-                    hx-trigger="load"
-                >
-                    <!-- Workstreams will be loaded here -->
+            <!-- Mobile Sidebar Toggle -->
+            <button 
+                class="md:hidden fixed bottom-4 right-4 z-50 p-3 bg-indigo-600 text-white rounded-full shadow-lg"
+                @click="sidebarOpen = !sidebarOpen"
+            >
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+                </svg>
+            </button>
+
+            <!-- Main Content -->
+            <main class="flex-1 overflow-y-auto bg-white p-6">
+                <div id="content">
+                    <!-- Default content: Note list -->
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-xl font-semibold">Recent Notes</h2>
+                            <select class="border rounded px-2 py-1">
+                                <option>Modified Date ↓</option>
+                                <option>Created Date ↓</option>
+                                <option>Title A-Z</option>
+                            </select>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead>
+                                    <tr class="border-b">
+                                        <th class="text-left py-2 w-1/2">Content</th>
+                                        <th class="text-left py-2">Title</th>
+                                        <th class="text-left py-2">Modified</th>
+                                        <th class="text-left py-2">Tags</th>
+                                        <th class="text-left py-2">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="note-list" hx-get="/api/items/note" hx-trigger="load">
+                                    <!-- Notes will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Editor Container -->
-        <div id="editor-container" class="mt-8">
-            <!-- Editor will be loaded here -->
+            </main>
         </div>
     </div>
 
     <script>
-        // Handle successful item creation
+        // Handle successful item creation/update
         document.body.addEventListener('htmx:afterRequest', function(evt) {
             if (evt.detail.successful) {
                 if (evt.detail.requestConfig.path.endsWith('/content')) {
@@ -128,21 +219,7 @@
                     indicator.textContent = 'Saved';
                     document.body.appendChild(indicator);
                     setTimeout(() => indicator.remove(), 2000);
-                } else if (evt.detail.requestConfig.method === 'POST') {
-                    // Refresh the list after creating a new item
-                    const type = evt.detail.requestConfig.path.split('/').pop();
-                    htmx.trigger(`#${type}s-list`, 'load');
                 } else if (evt.detail.requestConfig.method === 'DELETE') {
-                    // Clear editor if the deleted item was being edited
-                    const editorContainer = document.getElementById('editor-container');
-                    const editorHeader = editorContainer.querySelector('h3');
-                    if (editorHeader) {
-                        const itemId = editorContainer.querySelector('.text-gray-500').textContent.replace('ID: ', '');
-                        const deletedId = evt.detail.requestConfig.path.split('/').pop();
-                        if (itemId === deletedId) {
-                            editorContainer.innerHTML = '';
-                        }
-                    }
                     // Show delete indicator
                     const indicator = document.createElement('div');
                     indicator.className = 'fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow';

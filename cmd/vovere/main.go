@@ -17,27 +17,40 @@ import (
 )
 
 var (
-	port     = flag.Int("port", 9090, "Port to run the server on")
-	repoPath = flag.String("repo", "", "Path to the repository")
+	port = flag.Int("port", 9090, "Port to run the server on")
 )
+
+// repositoryMiddleware ensures a repository is selected
+func repositoryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("repository")
+		if err != nil || cookie.Value == "" {
+			http.Redirect(w, r, "/api/repository", http.StatusSeeOther)
+			return
+		}
+
+		// Initialize repository service
+		repo := services.NewRepository(cookie.Value)
+
+		// Store repository service in context
+		ctx := services.WithRepository(r.Context(), repo)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// itemHandler wraps the item handler with repository context
+type itemHandler struct {
+	tmpl *template.Template
+}
+
+func (h *itemHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	repo := services.RepositoryFromContext(r.Context())
+	handler := handlers.NewItemHandler(repo)
+	handler.Routes().ServeHTTP(w, r)
+}
 
 func main() {
 	flag.Parse()
-
-	if *repoPath == "" {
-		log.Fatal("Repository path is required")
-	}
-
-	// Ensure repository path exists
-	if err := os.MkdirAll(*repoPath, 0755); err != nil {
-		log.Fatalf("Failed to create repository directory: %v", err)
-	}
-
-	// Initialize services
-	repo := services.NewRepository(*repoPath)
-
-	// Initialize handlers
-	itemHandler := handlers.NewItemHandler(repo)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -47,23 +60,36 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	// Load templates
-	tmpl := template.Must(template.ParseFiles("web/templates/index.html"))
+	tmpl := template.Must(template.ParseFiles(
+		"web/templates/index.html",
+		"web/templates/repo-select.html",
+	))
 
 	// Static file server
 	workDir, _ := os.Getwd()
 	filesDir := filepath.Join(workDir, "web/static")
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir(filesDir))))
 
-	// Serve index page
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		if err := tmpl.Execute(w, nil); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	})
+	// Repository selection handler
+	repoHandler := handlers.NewRepositoryHandler(tmpl)
+	r.Mount("/api/repository", repoHandler.Routes())
 
-	// API routes
-	r.Mount("/api/items", itemHandler.Routes())
+	// Main application routes
+	r.Group(func(r chi.Router) {
+		// Add repository middleware
+		r.Use(repositoryMiddleware)
+
+		// Serve index page
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			if err := tmpl.ExecuteTemplate(w, "index.html", nil); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		})
+
+		// API routes
+		r.Mount("/api/items", &itemHandler{tmpl: tmpl})
+	})
 
 	// Start server
 	addr := fmt.Sprintf(":%d", *port)

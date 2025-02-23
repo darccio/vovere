@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vovere - Select Repository</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Alpine.js -->
+    <script src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-white">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <header class="mb-12 text-center">
+            <h1 class="text-4xl font-bold text-gray-900 mb-2">Vovere</h1>
+            <p class="text-gray-600">Select a repository to begin</p>
+        </header>
+
+        <div class="grid gap-8">
+            <!-- Repository Selection -->
+            <div class="bg-white p-6 rounded-lg border border-gray-200">
+                <h2 class="text-xl font-semibold mb-4">Open Repository</h2>
+                <form
+                    class="space-y-4"
+                    method="post"
+                    action="/api/repository/select"
+                >
+                    <div>
+                        <div class="flex gap-4">
+                            <input 
+                                type="text"
+                                name="path"
+                                class="flex-1 p-2 border rounded"
+                                placeholder="/path/to/repository"
+                            >
+                            <button
+                                type="submit"
+                                class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                            >
+                                Open
+                            </button>
+                        </div>
+                        <!-- Error message -->
+                        <div 
+                            class="mt-2 text-red-600 text-sm hidden"
+                            id="error-message"
+                        ></div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Recent Repositories -->
+            <div 
+                class="grid md:grid-cols-3 gap-4"
+                x-data="{ 
+                    recentRepos: JSON.parse(localStorage.getItem('recentRepos') || '[]').slice(0, 3)
+                }"
+            >
+                <template x-for="repo in recentRepos" :key="repo.path">
+                    <div 
+                        class="bg-white p-4 rounded-lg border border-gray-200 hover:border-indigo-600 cursor-pointer"
+                        @click="window.location.href = `/api/repository/select?path=${encodeURIComponent(repo.path)}`"
+                    >
+                        <h3 class="font-medium mb-2" x-text="repo.path.split('/').pop()"></h3>
+                        <p class="text-sm text-gray-500 mb-4" x-text="new Date(repo.lastAccessed).toLocaleString()"></p>
+                        <div class="grid grid-cols-3 gap-2">
+                            <template x-for="id in (repo.previewNoteIDs || []).slice(0, 3)" :key="id">
+                                <div class="aspect-square bg-gray-50 rounded p-2">
+                                    <p class="text-xs text-gray-600 truncate" x-text="id"></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Show error message if present in URL
+        window.addEventListener('load', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const error = urlParams.get('error');
+            if (error) {
+                const errorDiv = document.getElementById('error-message');
+                errorDiv.textContent = decodeURIComponent(error);
+                errorDiv.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html> 
