@@ -24,6 +24,11 @@ func NewRepository(basePath string) *Repository {
 	}
 }
 
+// BasePath returns the base path of the repository
+func (r *Repository) BasePath() string {
+	return r.basePath
+}
+
 // DeleteItem deletes an item's metadata and content files
 func (r *Repository) DeleteItem(item *models.Item) error {
 	// Delete metadata file

@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vovere</title>
+    <title>{{ if .PageTitle }}{{ .PageTitle }} - {{ end }}Vovere</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,6 +16,40 @@
     
     <!-- Alpine.js -->
     <script src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js" defer></script>
+
+    <script>
+        // Configure Tailwind for dark mode
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    typography: {
+                        DEFAULT: {
+                            css: {
+                                maxWidth: '100%',
+                            },
+                        },
+                        dark: {
+                            css: {
+                                color: '#d1d5db',
+                                a: { color: '#818cf8' },
+                                h1: { color: '#f3f4f6' },
+                                h2: { color: '#e5e7eb' },
+                                h3: { color: '#d1d5db' },
+                                h4: { color: '#9ca3af' },
+                                blockquote: { color: '#9ca3af', borderLeftColor: '#4b5563' },
+                                code: { color: '#e5e7eb', backgroundColor: '#1f2937' },
+                                pre: { backgroundColor: '#1f2937', color: '#e5e7eb' },
+                                strong: { color: '#f9fafb' },
+                                tr: { borderColor: '#4b5563' },
+                                thead: { color: '#f3f4f6', borderBottomColor: '#4b5563' },
+                            },
+                        },
+                    },
+                },
+            },
+        }
+    </script>
 
     <style>
         [x-cloak] { display: none !important; }
@@ -25,32 +62,288 @@
                 transform: translateX(0);
             }
         }
+        
+        /* Markdown styling */
+        .prose h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-top: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .prose h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .prose h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .prose p {
+            margin-bottom: 0.75rem;
+        }
+        .prose ul, .prose ol {
+            margin-left: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .prose ul {
+            list-style-type: disc;
+        }
+        .prose ol {
+            list-style-type: decimal;
+        }
+        .prose pre {
+            background-color: #f7f7f7;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            overflow-x: auto;
+            margin-bottom: 0.75rem;
+        }
+        .prose code {
+            font-family: monospace;
+            background-color: #f1f1f1;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+        }
+        .prose blockquote {
+            border-left: 3px solid #e2e8f0;
+            padding-left: 1rem;
+            margin-left: 0;
+            color: #4a5568;
+        }
+        .prose a {
+            color: #4f46e5;
+            text-decoration: underline;
+        }
+        .prose a:hover {
+            color: #4338ca;
+        }
+
+        /* Dark mode styles */
+        .dark .prose pre {
+            background-color: #1e1e1e;
+        }
+        .dark .prose code {
+            background-color: #2d2d2d;
+            color: #e1e1e1;
+        }
+        .dark .prose blockquote {
+            border-left-color: #4a5568;
+            color: #a0aec0;
+        }
+        .dark .prose a {
+            color: #818cf8;
+        }
+        .dark .prose a:hover {
+            color: #a5b4fc;
+        }
+        
+        /* Layout structure */
+        .main-layout {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        .content-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Content area with fixed sidebar and header */
+        .content-area {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .content-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+        
+        /* Content width restriction for better accessibility */
+        .content-max-width {
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+            width: 100%;
+        }
+        
+        /* Item content full height */
+        .class-item-content, .class-editor-textarea {
+            min-height: 300px;
+            flex-grow: 1;
+        }
+        
+        /* Additional flex styles for content areas */
+        .class-editor-form {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+        
+        .class-editor-textarea {
+            flex: 1;
+            resize: none; /* Prevent resize which can break layout */
+        }
+        
+        /* Metadata table */
+        .metadata-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .metadata-table th {
+            text-align: left;
+            padding: 8px;
+            background-color: #f8fafc;
+            font-weight: 600;
+            width: 30%;
+        }
+        
+        .metadata-table td {
+            padding: 8px;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        .dark .metadata-table th {
+            background-color: #1e293b;
+        }
+        
+        .dark .metadata-table td {
+            border-top-color: #334155;
+        }
+
+        /* Item view with sidebar layout */
+        #content-with-sidebar {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0; /* Important for Firefox */
+        }
+        
+        @media (min-width: 1024px) {
+            #content-with-sidebar {
+                flex-direction: row;
+                height: 100%;
+            }
+            
+            #content-with-sidebar > div:first-child {
+                overflow-y: auto;
+                flex: 1;
+            }
+            
+            #content-with-sidebar > div:last-child {
+                overflow-y: auto;
+                height: 100%;
+                flex-shrink: 0;
+                width: 33.333333%;
+            }
+        }
+        
+        /* Editor container */
+        .class-editor-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0; /* Important for Firefox */
+        }
     </style>
 </head>
-<body class="bg-white">
-    <div class="min-h-screen flex flex-col" x-data="{ sidebarOpen: true }">
-        <!-- Breadcrumb -->
-        <nav class="bg-white border-b" aria-label="Breadcrumb">
-            <div class="px-4 py-3">
-                <div id="breadcrumb" class="flex items-center space-x-2 text-sm">
-                    <!-- Breadcrumb items will be loaded here -->
+<body class="h-full bg-white dark:bg-gray-900 dark:text-white" 
+      x-data="{ 
+        sidebarOpen: true,
+        darkMode: localStorage.getItem('darkMode') === 'true' || 
+                 (!localStorage.getItem('darkMode') && 
+                  window.matchMedia('(prefers-color-scheme: dark)').matches)
+      }"
+      x-init="
+        $watch('darkMode', value => {
+            localStorage.setItem('darkMode', value);
+            if (value) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+        
+        // Initial setup
+        if (darkMode) {
+            document.documentElement.classList.add('dark');
+        }
+      ">
+    <div class="main-layout min-h-screen">
+        <!-- Header with Search -->
+        <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 class-header">
+            <div class="px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center space-x-2 text-sm class-header-left">
+                    <!-- Mobile sidebar toggle -->
+                    <button 
+                        class="md:hidden p-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded class-mobile-toggle"
+                        @click="sidebarOpen = !sidebarOpen"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="flex items-center space-x-4 class-header-right">
+                    <!-- Search -->
+                    <div class="relative w-64 class-search-container">
+                        <input 
+                            type="text"
+                            class="w-full px-4 py-1 pr-8 border rounded text-sm bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600 class-search-input"
+                            placeholder="Search..."
+                            hx-get="/api/search"
+                            hx-trigger="input changed delay:500ms, search"
+                            hx-target="#content"
+                        >
+                        <div class="absolute right-3 top-1.5 text-gray-400 dark:text-gray-300 class-search-icon">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <!-- Theme Toggle -->
+                    <button 
+                        @click="darkMode = !darkMode" 
+                        class="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 class-theme-toggle"
+                        aria-label="Toggle dark mode"
+                    >
+                        <svg x-show="!darkMode" class="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                        </svg>
+                        <svg x-show="darkMode" class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </nav>
 
-        <div class="flex flex-1 overflow-hidden">
+        <div class="content-container">
             <!-- Sidebar -->
             <aside 
-                class="w-64 bg-white border-r flex flex-col sidebar transition-transform md:translate-x-0"
+                class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col sidebar transition-transform md:translate-x-0 class-sidebar"
                 :class="{ 'open': sidebarOpen }"
             >
                 <!-- Repository Header -->
-                <div class="p-4 border-b">
+                <div class="p-4 border-b border-gray-200 dark:border-gray-700 class-repo-header">
                     <div class="flex items-center justify-between">
-                        <h2 class="font-semibold truncate" x-text="localStorage.getItem('currentRepo')?.split('/').pop() || 'Repository'"></h2>
+                        <h2 class="font-semibold truncate class-repo-name">{{ .RepositoryName }}</h2>
                         <button
-                            class="text-gray-500 hover:text-red-500"
-                            @click="document.cookie = 'repository=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'; window.location.href = '/api/repository'"
+                            class="text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 class-repo-close"
+                            onclick="window.location.href='/api/repository/close'"
                             title="Close Repository"
                         >
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,15 +354,15 @@
                 </div>
 
                 <!-- Scrollable Content -->
-                <div class="flex-1 overflow-y-auto">
+                <div class="flex-1 overflow-y-auto class-sidebar-content">
                     <!-- Creation Dropdown -->
-                    <div class="p-4" x-data="{ showDropdown: false }" @click.away="showDropdown = false">
+                    <div class="p-4 class-create-dropdown" x-data="{ showDropdown: false }" @click.away="showDropdown = false">
                         <div class="relative z-10">
                             <button 
-                                class="w-full flex items-center justify-between px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                                class="w-full flex items-center justify-between px-4 py-2 bg-indigo-600 dark:bg-indigo-700 text-white rounded hover:bg-indigo-700 dark:hover:bg-indigo-800 class-create-button"
                                 @click="showDropdown = !showDropdown"
                             >
-                                <span>New Note</span>
+                                <span>Create New</span>
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                 </svg>
@@ -77,130 +370,136 @@
                             <div 
                                 x-show="showDropdown"
                                 x-cloak
-                                class="absolute w-full mt-1 bg-white border rounded shadow-lg"
+                                class="absolute w-full mt-1 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded shadow-lg class-create-menu"
                             >
                                 <button 
-                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-600 dark:text-white class-create-note"
                                     hx-post="/api/items/note"
                                     hx-target="#content"
                                     hx-swap="innerHTML"
+                                    hx-boost="true"
                                     @click="showDropdown = false"
                                 >Note</button>
                                 <button 
-                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-600 dark:text-white class-create-bookmark"
                                     hx-post="/api/items/bookmark"
                                     hx-target="#content"
                                     hx-swap="innerHTML"
+                                    hx-boost="true"
                                     @click="showDropdown = false"
                                 >Bookmark</button>
                                 <button 
-                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-600 dark:text-white class-create-task"
                                     hx-post="/api/items/task"
                                     hx-target="#content"
                                     hx-swap="innerHTML"
+                                    hx-boost="true"
                                     @click="showDropdown = false"
                                 >Task</button>
                                 <button 
-                                    class="w-full px-4 py-2 text-left hover:bg-gray-50"
+                                    class="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-600 dark:text-white class-create-workstream"
                                     hx-post="/api/items/workstream"
                                     hx-target="#content"
                                     hx-swap="innerHTML"
+                                    hx-boost="true"
                                     @click="showDropdown = false"
                                 >Workstream</button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Search -->
-                    <div class="p-4 border-t">
-                        <div class="relative">
-                            <input 
-                                type="text"
-                                class="w-full px-4 py-2 pr-8 border rounded"
-                                placeholder="Search..."
-                                hx-get="/api/search"
-                                hx-trigger="input changed delay:500ms"
-                                hx-target="#content"
-                            >
-                            <div class="absolute right-3 top-2.5 text-gray-400">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                                </svg>
-                            </div>
-                        </div>
-                        <!-- Search Filters -->
-                        <div class="flex flex-wrap gap-2 mt-2">
-                            <button class="px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200">type:note</button>
-                            <button class="px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200">type:bookmark</button>
-                            <button class="px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200">type:task</button>
-                        </div>
-                    </div>
-
                     <!-- Inbox -->
-                    <div class="p-4 border-t">
+                    <!--div class="p-4 border-t border-gray-200 dark:border-gray-700 class-inbox-section">
                         <button 
-                            class="w-full flex items-center justify-between px-4 py-2 text-left hover:bg-gray-50 rounded"
+                            class="w-full flex items-center justify-between px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded class-inbox-button"
                             hx-get="/api/inbox"
                             hx-target="#content"
                         >
                             <span>Inbox</span>
-                            <span 
-                                class="bg-indigo-600 text-white text-xs px-2 py-1 rounded-full"
-                                hx-get="/api/inbox/count"
-                                hx-trigger="load"
-                                hx-swap="innerHTML"
-                            >0</span>
                         </button>
+                    </div-->
+
+                    <!-- Navigation Links -->
+                    <div class="p-4 border-t border-gray-200 dark:border-gray-700 class-nav-section">
+                        <div class="space-y-1 class-nav-links">
+                            <a 
+                                href="/notes" 
+                                hx-get="/api/items/note" 
+                                hx-target="#content" 
+                                hx-push-url="/notes"
+                                class="block px-4 py-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 class-nav-notes"
+                            >Notes</a>
+                            <a 
+                                href="/bookmarks" 
+                                hx-get="/api/items/bookmark" 
+                                hx-target="#content" 
+                                hx-push-url="/bookmarks"
+                                class="block px-4 py-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 class-nav-bookmarks"
+                            >Bookmarks</a>
+                            <a 
+                                href="/tasks" 
+                                hx-get="/api/items/task" 
+                                hx-target="#content" 
+                                hx-push-url="/tasks"
+                                class="block px-4 py-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 class-nav-tasks"
+                            >Tasks</a>
+                            <a 
+                                href="/workstreams" 
+                                hx-get="/api/items/workstream" 
+                                hx-target="#content" 
+                                hx-push-url="/workstreams"
+                                class="block px-4 py-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 class-nav-workstreams"
+                            >Workstreams</a>
+                        </div>
                     </div>
 
                     <!-- Tags -->
-                    <div class="p-4 border-t">
-                        <h3 class="font-medium mb-2">Tags</h3>
-                        <div class="flex flex-wrap gap-2" id="tag-cloud" hx-get="/api/tags" hx-trigger="load">
+                    <div class="p-4 border-t border-gray-200 dark:border-gray-700 class-tags-section">
+                        <h3 class="font-medium mb-2 class-tags-title">Tags</h3>
+                        <div class="flex flex-wrap gap-2 class-tag-cloud" id="tag-cloud" hx-get="/api/tags" hx-trigger="load">
                             <!-- Tags will be loaded here -->
                         </div>
                     </div>
                 </div>
             </aside>
 
-            <!-- Mobile Sidebar Toggle -->
-            <button 
-                class="md:hidden fixed bottom-4 right-4 z-50 p-3 bg-indigo-600 text-white rounded-full shadow-lg"
-                @click="sidebarOpen = !sidebarOpen"
-            >
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
-                </svg>
-            </button>
-
             <!-- Main Content -->
-            <main class="flex-1 overflow-y-auto bg-white p-6">
-                <div id="content">
-                    <!-- Default content: Note list -->
-                    <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h2 class="text-xl font-semibold">Recent Notes</h2>
-                            <select class="border rounded px-2 py-1">
-                                <option>Modified Date ↓</option>
-                                <option>Created Date ↓</option>
-                                <option>Title A-Z</option>
-                            </select>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full">
-                                <thead>
-                                    <tr class="border-b">
-                                        <th class="text-left py-2 w-1/2">Content</th>
-                                        <th class="text-left py-2">Title</th>
-                                        <th class="text-left py-2">Modified</th>
-                                        <th class="text-left py-2">Tags</th>
-                                        <th class="text-left py-2">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="note-list" hx-get="/api/items/note" hx-trigger="load">
-                                    <!-- Notes will be loaded here -->
-                                </tbody>
-                            </table>
+            <main class="flex-1 overflow-hidden bg-gray-50 dark:bg-gray-900 class-main-content">
+                <div class="content-area">
+                    <!-- Breadcrumb moved above content -->
+                    <div id="breadcrumb" class="p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 class-breadcrumb flex items-center gap-2">
+                        <a href="/" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex-shrink-0 inline-flex items-center" hx-boost="true">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                            </svg>
+                        </a>
+                        <span class="text-gray-500 dark:text-gray-400 flex-shrink-0">/</span>
+                    </div>
+                    
+                    <!-- Content area with scrolling -->
+                    <div class="content-wrapper class-content-wrapper flex-1 flex flex-col overflow-y-auto">
+                        <div id="content" class="content-max-width class-content flex-1 flex flex-col">
+                            <!-- Default content depends on ViewType -->
+                            {{ if eq .ViewType "dashboard" }}
+                            <div class="space-y-4 flex-1">
+                                <!-- Dashboard content will be loaded by HTMX -->
+                                <div hx-get="/api/dashboard/recent" hx-trigger="load" class="class-dashboard-loader"></div>
+                            </div>
+                            {{ else if eq .ViewType "list" }}
+                            <div class="space-y-4 flex-1">
+                                <div hx-get="/api/items/{{ .ItemType }}" hx-trigger="load" class="class-list-items"></div>
+                            </div>
+                            {{ else if eq .ViewType "detail" }}
+                            <div class="space-y-6 flex-1 flex flex-col">
+                                <!-- Item details will be loaded by HTMX -->
+                                <div hx-get="/api/items/{{ .ItemType }}/{{ .ItemID }}" hx-trigger="load" class="flex-1 flex flex-col"></div>
+                            </div>
+                            {{ else if eq .ViewType "edit" }}
+                            <div class="space-y-6 flex-1 flex flex-col">
+                                <!-- Editor will be loaded by HTMX -->
+                                <div hx-get="/api/items/{{ .ItemType }}/{{ .ItemID }}/edit" hx-trigger="load" class="flex-1 flex flex-col"></div>
+                            </div>
+                            {{ end }}
                         </div>
                     </div>
                 </div>
@@ -215,30 +514,46 @@
                 if (evt.detail.requestConfig.path.endsWith('/content')) {
                     // Show save indicator
                     const indicator = document.createElement('div');
-                    indicator.className = 'fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow';
+                    indicator.className = 'fixed bottom-4 left-4 bg-green-500 text-white px-4 py-2 rounded shadow class-save-indicator';
                     indicator.textContent = 'Saved';
-                    document.body.appendChild(indicator);
-                    setTimeout(() => indicator.remove(), 2000);
-                } else if (evt.detail.requestConfig.method === 'DELETE') {
-                    // Show delete indicator
-                    const indicator = document.createElement('div');
-                    indicator.className = 'fixed bottom-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow';
-                    indicator.textContent = 'Deleted';
                     document.body.appendChild(indicator);
                     setTimeout(() => indicator.remove(), 2000);
                 }
             }
         });
 
-        // Handle tab key in textarea
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Tab' && e.target.tagName === 'TEXTAREA') {
-                e.preventDefault();
-                const start = e.target.selectionStart;
-                const end = e.target.selectionEnd;
-                e.target.value = e.target.value.substring(0, start) + '    ' + e.target.value.substring(end);
-                e.target.selectionStart = e.target.selectionEnd = start + 4;
+        // Fix for content nesting in navigation
+        document.body.addEventListener('htmx:beforeOnLoad', function(evt) {
+            // Only interfere with responses that would swap into the DOM
+            if (evt.detail.shouldSwap) {
+                // Check if this is a full HTML document response (contains <html> tag or DOCTYPE)
+                const responseText = evt.detail.xhr.responseText;
+                if (responseText.includes('<html') || 
+                    responseText.includes('<!DOCTYPE') ||
+                    // Also detect if response contains the full layout structure
+                    responseText.includes('<div class="main-layout') ||
+                    responseText.includes('<div id="content-with-sidebar"')) {
+                    
+                    // This is a full page or would create nesting - prevent the default
+                    evt.preventDefault();
+                    
+                    // Redirect to the proper URL
+                    const targetUrl = evt.detail.xhr.responseURL || window.location.href;
+                    console.log("Preventing content nesting, redirecting to:", targetUrl);
+                    window.location.href = targetUrl;
+                }
             }
+        });
+        
+        // Add global boost for navigation
+        document.addEventListener('htmx:load', function() {
+            // Add boost to all navigation links that don't already have it
+            const navLinks = document.querySelectorAll('a[href^="/"][href$="s"]');
+            navLinks.forEach(link => {
+                if (!link.hasAttribute('hx-boost')) {
+                    link.setAttribute('hx-boost', 'true');
+                }
+            });
         });
     </script>
 </body>

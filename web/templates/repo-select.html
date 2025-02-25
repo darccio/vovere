@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vovere - Select Repository</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,18 +16,67 @@
     
     <!-- Alpine.js -->
     <script src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js" defer></script>
+
+    <script>
+        // Configure Tailwind for dark mode
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {}
+            }
+        }
+    </script>
+
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
 </head>
-<body class="bg-white">
+<body class="h-full bg-white dark:bg-gray-900 dark:text-white" 
+      x-data="{ 
+        darkMode: localStorage.getItem('darkMode') === 'true' || 
+                 (!localStorage.getItem('darkMode') && 
+                  window.matchMedia('(prefers-color-scheme: dark)').matches)
+      }"
+      x-init="
+        $watch('darkMode', value => {
+            localStorage.setItem('darkMode', value);
+            if (value) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+        
+        // Initial setup
+        if (darkMode) {
+            document.documentElement.classList.add('dark');
+        }
+      ">
     <div class="container mx-auto px-4 py-8 max-w-4xl">
-        <header class="mb-12 text-center">
-            <h1 class="text-4xl font-bold text-gray-900 mb-2">Vovere</h1>
-            <p class="text-gray-600">Select a repository to begin</p>
+        <header class="mb-12 text-center relative">
+            <div class="absolute right-0 top-0">
+                <!-- Theme Toggle -->
+                <button 
+                    @click="darkMode = !darkMode" 
+                    class="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                    aria-label="Toggle dark mode"
+                >
+                    <svg x-show="!darkMode" class="w-5 h-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                    </svg>
+                    <svg x-show="darkMode" class="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <h1 class="text-4xl font-bold text-gray-900 dark:text-white mb-2">Vovere</h1>
+            <p class="text-gray-600 dark:text-gray-400">Select a repository to begin</p>
         </header>
 
         <div class="grid gap-8">
             <!-- Repository Selection -->
-            <div class="bg-white p-6 rounded-lg border border-gray-200">
-                <h2 class="text-xl font-semibold mb-4">Open Repository</h2>
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
+                <h2 class="text-xl font-semibold mb-4 dark:text-white">Open Repository</h2>
                 <form
                     class="space-y-4"
                     method="post"
@@ -35,19 +87,19 @@
                             <input 
                                 type="text"
                                 name="path"
-                                class="flex-1 p-2 border rounded"
+                                class="flex-1 p-2 border rounded bg-white dark:bg-gray-700 dark:text-white dark:border-gray-600"
                                 placeholder="/path/to/repository"
                             >
                             <button
                                 type="submit"
-                                class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                                class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 dark:bg-indigo-700 dark:hover:bg-indigo-600"
                             >
                                 Open
                             </button>
                         </div>
                         <!-- Error message -->
                         <div 
-                            class="mt-2 text-red-600 text-sm hidden"
+                            class="mt-2 text-red-600 dark:text-red-400 text-sm hidden"
                             id="error-message"
                         ></div>
                     </div>
@@ -63,15 +115,15 @@
             >
                 <template x-for="repo in recentRepos" :key="repo.path">
                     <div 
-                        class="bg-white p-4 rounded-lg border border-gray-200 hover:border-indigo-600 cursor-pointer"
+                        class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-indigo-600 dark:hover:border-indigo-500 cursor-pointer"
                         @click="window.location.href = `/api/repository/select?path=${encodeURIComponent(repo.path)}`"
                     >
-                        <h3 class="font-medium mb-2" x-text="repo.path.split('/').pop()"></h3>
-                        <p class="text-sm text-gray-500 mb-4" x-text="new Date(repo.lastAccessed).toLocaleString()"></p>
+                        <h3 class="font-medium mb-2 dark:text-white" x-text="repo.path.split('/').pop()"></h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4" x-text="new Date(repo.lastAccessed).toLocaleString()"></p>
                         <div class="grid grid-cols-3 gap-2">
                             <template x-for="id in (repo.previewNoteIDs || []).slice(0, 3)" :key="id">
-                                <div class="aspect-square bg-gray-50 rounded p-2">
-                                    <p class="text-xs text-gray-600 truncate" x-text="id"></p>
+                                <div class="aspect-square bg-gray-50 dark:bg-gray-700 rounded p-2">
+                                    <p class="text-xs text-gray-600 dark:text-gray-300 truncate" x-text="id"></p>
                                 </div>
                             </template>
                         </div>

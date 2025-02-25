@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -9,6 +11,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// RepositoryConfig represents configuration for a repository
+type RepositoryConfig struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
+}
 
 // RepositoryHandler handles repository selection and management
 type RepositoryHandler struct {
@@ -29,8 +38,44 @@ func (h *RepositoryHandler) Routes() chi.Router {
 	r.Get("/", h.showSelection)
 	r.Post("/select", h.selectRepository)
 	r.Get("/select", h.selectRepository) // For recent repos
+	r.Get("/config", h.getConfig)
+	r.Get("/close", h.closeRepository) // Add endpoint for closing repository
 
 	return r
+}
+
+// getConfig returns repository configuration
+func (h *RepositoryHandler) getConfig(w http.ResponseWriter, r *http.Request) {
+	// Get repository from cookie
+	cookie, err := r.Cookie("repository")
+	if err != nil {
+		http.Error(w, "Repository not selected", http.StatusBadRequest)
+		return
+	}
+
+	repoPath := cookie.Value
+	if repoPath == "" {
+		http.Error(w, "Repository path is empty", http.StatusBadRequest)
+		return
+	}
+
+	// Default config uses the last directory name
+	config := RepositoryConfig{
+		Name: filepath.Base(repoPath),
+	}
+
+	// Try to load config file
+	configPath := filepath.Join(repoPath, "config.json")
+	if configFile, err := os.Open(configPath); err == nil {
+		defer configFile.Close()
+		if err := json.NewDecoder(configFile).Decode(&config); err != nil {
+			// Use default on error
+		}
+	}
+
+	// Return config as JSON
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
 }
 
 // showSelection shows the repository selection screen
@@ -42,7 +87,9 @@ func (h *RepositoryHandler) showSelection(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.tmpl.ExecuteTemplate(w, "repo-select.html", nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// Use the error page template
+		w.WriteHeader(http.StatusInternalServerError)
+		h.tmpl.ExecuteTemplate(w, "errors/500.html", nil)
 		return
 	}
 }
@@ -51,6 +98,7 @@ func (h *RepositoryHandler) showSelection(w http.ResponseWriter, r *http.Request
 func (h *RepositoryHandler) selectRepository(w http.ResponseWriter, r *http.Request) {
 	path := r.FormValue("path")
 	if path == "" {
+		// TODO: pass errors through another way instead of query parameters.
 		http.Redirect(w, r, "/api/repository?error="+url.QueryEscape("Repository path is required"), http.StatusSeeOther)
 		return
 	}
@@ -59,6 +107,7 @@ func (h *RepositoryHandler) selectRepository(w http.ResponseWriter, r *http.Requ
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			// TODO: don't create the directory if it doesn't exist.
 			// Create directory if it doesn't exist
 			if err := os.MkdirAll(path, 0755); err != nil {
 				http.Redirect(w, r, "/api/repository?error="+url.QueryEscape("Failed to create repository directory"), http.StatusSeeOther)
@@ -92,6 +141,23 @@ func (h *RepositoryHandler) selectRepository(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	// Create default config.json if it doesn't exist
+	// TODO: review this, it isn't really needed by default.
+	configPath := filepath.Join(path, "config.json")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		config := RepositoryConfig{
+			Name:        filepath.Base(path),
+			Description: "Vovere knowledge repository",
+			Tags:        []string{},
+		}
+
+		configFile, err := os.Create(configPath)
+		if err == nil {
+			defer configFile.Close()
+			json.NewEncoder(configFile).Encode(config)
+		}
+	}
+
 	// Set repository cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "repository",
@@ -102,6 +168,49 @@ func (h *RepositoryHandler) selectRepository(w http.ResponseWriter, r *http.Requ
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	// Redirect to main application
+	// Save to localStorage via script (for recent repositories)
+	w.Header().Set("Content-Type", "text/html")
+	script := `
+	<script>
+		// Get existing repos from localStorage or initialize empty array
+		const recentRepos = JSON.parse(localStorage.getItem('recentRepos') || '[]');
+		
+		// Create new entry
+		const newRepo = {
+			path: "%s",
+			lastAccessed: new Date().toISOString()
+		};
+		
+		// Remove existing entry with same path
+		const filteredRepos = recentRepos.filter(repo => repo.path !== newRepo.path);
+		
+		// Add to front of array and limit to 5 entries
+		filteredRepos.unshift(newRepo);
+		if (filteredRepos.length > 5) filteredRepos.pop();
+		
+		// Save back to localStorage
+		localStorage.setItem('recentRepos', JSON.stringify(filteredRepos));
+		localStorage.setItem('currentRepo', "%s");
+		
+		// Redirect to main page with theme preservation
+		window.location.href = '/';
+	</script>
+	`
+	fmt.Fprintf(w, script, path, path)
+}
+
+// closeRepository handles closing the current repository
+func (h *RepositoryHandler) closeRepository(w http.ResponseWriter, r *http.Request) {
+	// Clear the repository cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "repository",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1, // Delete the cookie
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+	})
+
+	// Redirect to repository selection page
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
