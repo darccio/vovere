@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"sort"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -32,6 +35,8 @@ func customErrorHandler(tmpl *template.Template) func(http.Handler) http.Handler
 				// Recover from panics and display error page
 				if err := recover(); err != nil {
 					log.Printf("PANIC: %+v", err)
+					// Print the stack trace of the recovered panic
+					debug.PrintStack()
 					ww.WriteHeader(http.StatusInternalServerError)
 					tmpl.ExecuteTemplate(ww, "errors/500.html", nil)
 				}
@@ -271,6 +276,173 @@ func main() {
 		// API routes
 		r.Mount("/api/items", &itemHandler{tmpl: tmpl})
 		r.Mount("/api/dashboard", &dashboardHandler{tmpl: tmpl})
+
+		// Mount the TagHandler for our new tag API
+		r.Mount("/api/tags", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			repo := services.RepositoryFromContext(r.Context())
+			tagHandler := handlers.NewTagHandler(repo)
+			tagHandler.Routes().ServeHTTP(w, r)
+		}))
+
+		// API tag route for HTMX
+		r.Get("/api/tags/{tag}", func(w http.ResponseWriter, r *http.Request) {
+			tag := chi.URLParam(r, "tag")
+			repo := services.RepositoryFromContext(r.Context())
+
+			// Instead of trying to route through the ItemHandler,
+			// let's directly implement the tag items listing here
+			tagItems, err := services.NewTagService(repo).GetItemsByTag(tag)
+			if err != nil {
+				http.Error(w, "Failed to get items for tag: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// Sort items by modified date (newest first)
+			sort.Slice(tagItems, func(i, j int) bool {
+				return tagItems[i].Modified.After(tagItems[j].Modified)
+			})
+
+			// Set content type to HTML
+			w.Header().Set("Content-Type", "text/html")
+
+			// Render the items list in HTML format
+			fmt.Fprintf(w, `
+			<div class="flex justify-between items-center mb-6">
+				<h1 class="text-2xl font-bold class-page-title">Items tagged #%s</h1>
+			</div>
+			<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden class-items-list">
+				<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+					<thead class="bg-gray-50 dark:bg-gray-900">
+						<tr>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 50%%;">Title</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 20%%;">Type</th>
+							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 20%%;">Modified</th>
+						</tr>
+					</thead>
+					<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 class-items-rows">`, tag)
+
+			if len(tagItems) == 0 {
+				fmt.Fprintf(w, `
+				<tr>
+					<td colspan="3" class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500 dark:text-gray-400">
+						No items found with tag #%s.
+					</td>
+				</tr>
+				`, tag)
+			}
+
+			for _, item := range tagItems {
+				title := item.Title
+				if title == "" {
+					title = item.ID
+				}
+
+				fmt.Fprintf(w, `
+				<tr class="hover:bg-gray-50 dark:hover:bg-gray-700 class-item-row">
+					<td class="px-6 py-4 whitespace-nowrap">
+						<a 
+							href="/items/%s/%s"
+							class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 class-item-title"
+							hx-get="/api/items/%s/%s"
+							hx-target="#content"
+							hx-swap="innerHTML"
+							hx-push-url="/items/%s/%s"
+						>%s</a>
+					</td>
+					<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 class-item-type">
+						%s
+					</td>
+					<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 class-item-modified">
+						%s
+					</td>
+				</tr>`,
+					item.Type, item.ID,
+					item.Type, item.ID,
+					item.Type, item.ID,
+					title,
+					strings.Title(string(item.Type)),
+					item.Modified.Format("Jan 2, 2006 3:04 PM"),
+				)
+			}
+
+			// Close table and container
+			fmt.Fprint(w, `
+					</tbody>
+				</table>
+			</div>
+			`)
+		})
+
+		// Tags route - Main tags page
+		r.Get("/tags", func(w http.ResponseWriter, r *http.Request) {
+			repo := services.RepositoryFromContext(r.Context())
+			repoName := getRepositoryName(repo.BasePath())
+
+			// Create tag handler and get the list HTML directly
+			tagHandler := handlers.NewTagHandler(repo)
+			tagListHTML, err := tagHandler.RenderTagList()
+			if err != nil {
+				http.Error(w, "Failed to render tag list: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// Create breadcrumb HTML for the tags page
+			breadcrumbHTML := `
+			<a href="/" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex-shrink-0 inline-flex items-center" hx-boost="true">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+				</svg>
+			</a>
+			<span class="text-gray-500 dark:text-gray-400 flex-shrink-0">/</span>
+			<span class="text-gray-600 dark:text-gray-300">Tags</span>
+			`
+
+			data := map[string]interface{}{
+				"RepositoryName": repoName,
+				"PageTitle":      "Tags",
+				"ViewType":       "tags",
+				"TagListHTML":    template.HTML(tagListHTML),    // Pre-rendered HTML
+				"BreadcrumbHTML": template.HTML(breadcrumbHTML), // Pre-rendered breadcrumb
+			}
+
+			if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		})
+
+		// Tags route
+		r.Get("/tags/{tag}", func(w http.ResponseWriter, r *http.Request) {
+			repo := services.RepositoryFromContext(r.Context())
+			repoName := getRepositoryName(repo.BasePath())
+			tag := chi.URLParam(r, "tag")
+
+			// Create breadcrumb HTML for tag detail page
+			breadcrumbHTML := fmt.Sprintf(`
+			<a href="/" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex-shrink-0 inline-flex items-center" hx-boost="true">
+				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+				</svg>
+			</a>
+			<span class="text-gray-500 dark:text-gray-400 flex-shrink-0">/</span>
+			<a href="/tags" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex-shrink-0" hx-boost="true">Tags</a>
+			<span class="text-gray-500 dark:text-gray-400 flex-shrink-0">/</span>
+			<span class="text-gray-600 dark:text-gray-300">%s</span>
+			`, tag)
+
+			data := map[string]interface{}{
+				"RepositoryName": repoName,
+				"PageTitle":      "Tag: #" + tag,
+				"ViewType":       "list",
+				"Tag":            tag,
+				"BreadcrumbHTML": template.HTML(breadcrumbHTML),
+			}
+
+			if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		})
 	})
 
 	// Handle 404 for undefined routes
