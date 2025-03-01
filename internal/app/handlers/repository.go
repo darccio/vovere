@@ -107,12 +107,9 @@ func (h *RepositoryHandler) selectRepository(w http.ResponseWriter, r *http.Requ
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// TODO: don't create the directory if it doesn't exist.
-			// Create directory if it doesn't exist
-			if err := os.MkdirAll(path, 0755); err != nil {
-				http.Redirect(w, r, "/api/repository?error="+url.QueryEscape("Failed to create repository directory"), http.StatusSeeOther)
-				return
-			}
+			// Directory doesn't exist, return error instead of creating it
+			http.Redirect(w, r, "/api/repository?error="+url.QueryEscape("Repository directory does not exist"), http.StatusSeeOther)
+			return
 		} else {
 			http.Redirect(w, r, "/api/repository?error="+url.QueryEscape("Invalid repository path"), http.StatusSeeOther)
 			return
