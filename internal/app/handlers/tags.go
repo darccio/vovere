@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"vovere/internal/app/services"
-
 	"github.com/go-chi/chi/v5"
+
+	"vovere/internal/app/services"
 )
 
 // TagHandler handles HTTP requests for tags
