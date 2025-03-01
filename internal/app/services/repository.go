@@ -87,6 +87,20 @@ func (r *Repository) ListItems(itemType models.ItemType) ([]*models.Item, error)
 
 // SaveItem saves an item's metadata and content
 func (r *Repository) SaveItem(item *models.Item, content string) error {
+	// Create a tag service
+	tagService := NewTagService(r)
+
+	// Store previous tags
+	previousTags := make([]string, len(item.Tags))
+	copy(previousTags, item.Tags)
+
+	// Only extract tags from content if we don't already have tags set
+	// This ensures manually set tags are preserved
+	if content != "" && len(item.Tags) == 0 {
+		// Extract tags from content only if no tags were manually set
+		item.Tags = tagService.ExtractTags(content)
+	}
+
 	// Save metadata
 	metaPath := r.getMetaPath(item)
 	if err := os.MkdirAll(filepath.Dir(metaPath), 0755); err != nil {
@@ -114,6 +128,11 @@ func (r *Repository) SaveItem(item *models.Item, content string) error {
 		if err := os.WriteFile(contentPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write content file: %w", err)
 		}
+	}
+
+	// Update tag relationships (moved outside the content conditional)
+	if err := tagService.UpdateItemTags(item, previousTags); err != nil {
+		return fmt.Errorf("failed to update tag relationships: %w", err)
 	}
 
 	return nil
@@ -158,9 +177,27 @@ func (r *Repository) UpdateContent(item *models.Item, content string) error {
 		return fmt.Errorf("failed to create content directory: %w", err)
 	}
 
+	// Store previous tags
+	previousTags := make([]string, len(item.Tags))
+	copy(previousTags, item.Tags)
+
+	// Extract new tags from content
+	tagService := NewTagService(r)
+	extractedTags := tagService.ExtractTags(content)
+
+	// Replace the item's tags with the extracted ones
+	item.Tags = extractedTags
+
 	// Write content to file
 	if err := os.WriteFile(contentPath, []byte(content), 0644); err != nil {
+		// Restore original tags if content write fails
+		item.Tags = previousTags
 		return fmt.Errorf("failed to write content file: %w", err)
+	}
+
+	// Update tag relationships
+	if err := tagService.UpdateItemTags(item, previousTags); err != nil {
+		return fmt.Errorf("failed to update tag relationships: %w", err)
 	}
 
 	// Update modification time in metadata

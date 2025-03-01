@@ -87,9 +87,15 @@ func TestCreateItem(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	// Response should contain HTML for the editor
-	if !strings.Contains(w.Body.String(), "New note") {
-		t.Errorf("Response doesn't contain expected content")
+	// Check for the HX-Redirect header
+	redirectHeader := w.Header().Get("HX-Redirect")
+	if redirectHeader == "" {
+		t.Errorf("Expected HX-Redirect header to be set")
+	}
+
+	// The header should point to the edit view for the new item
+	if !strings.Contains(redirectHeader, "/items/note/") {
+		t.Errorf("Redirect URL doesn't contain expected path, got: %s", redirectHeader)
 	}
 
 	// Verify that a new item was created
@@ -278,5 +284,86 @@ func TestDeleteItem(t *testing.T) {
 
 	if len(items) != 0 {
 		t.Errorf("Expected 0 items after deletion, got %d", len(items))
+	}
+}
+
+// TestDeleteItemWithTags verifies that when an item with tags is deleted,
+// the item is properly removed from all tag associations
+func TestDeleteItemWithTags(t *testing.T) {
+	// Setup test environment
+	repo, cleanup := setupTestEnv(t)
+	defer cleanup()
+
+	// Create tag service
+	tagService := services.NewTagService(repo)
+
+	// Create a test item (initially without tags)
+	item := models.NewItem(models.TypeNote, "tagged-item-to-delete")
+	item.Title = "Tagged Item To Delete"
+	if err := repo.SaveItem(item, "Content of tagged item"); err != nil {
+		t.Fatalf("Failed to save test item: %v", err)
+	}
+
+	// Add tags to the item (using empty previous tags as this is the first update)
+	previousTags := []string{}
+	item.Tags = []string{"test-tag1", "test-tag2"}
+	if err := tagService.UpdateItemTags(item, previousTags); err != nil {
+		t.Fatalf("Failed to add tags to item: %v", err)
+	}
+
+	// Verify tags were added correctly
+	items1, err := tagService.GetItemsByTag("test-tag1")
+	if err != nil {
+		t.Fatalf("Failed to get items by tag: %v", err)
+	}
+	if len(items1) != 1 {
+		t.Errorf("Expected 1 item with tag1, got %d", len(items1))
+	}
+
+	// Create item handler
+	handler := handlers.NewItemHandler(repo)
+
+	// Create a test request for deleting the item
+	r := httptest.NewRequest("DELETE", "/note/tagged-item-to-delete", nil)
+	w := httptest.NewRecorder()
+
+	// Add Chi URL params to the request
+	r = addChiURLParams(r, map[string]string{
+		"type": "note",
+		"id":   "tagged-item-to-delete",
+	})
+
+	// Call the handler
+	handler.Routes().ServeHTTP(w, r)
+
+	// Check response
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
+	}
+
+	// Verify that the item was deleted
+	items, err := repo.ListItems(models.TypeNote)
+	if err != nil {
+		t.Fatalf("Failed to list items: %v", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("Expected 0 items after deletion, got %d", len(items))
+	}
+
+	// Verify the item was removed from all tags
+	items1, err = tagService.GetItemsByTag("test-tag1")
+	if err != nil {
+		t.Fatalf("Failed to get items by tag after deletion: %v", err)
+	}
+	if len(items1) != 0 {
+		t.Errorf("Expected 0 items with tag1 after deletion, got %d", len(items1))
+	}
+
+	items2, err := tagService.GetItemsByTag("test-tag2")
+	if err != nil {
+		t.Fatalf("Failed to get items by tag after deletion: %v", err)
+	}
+	if len(items2) != 0 {
+		t.Errorf("Expected 0 items with tag2 after deletion, got %d", len(items2))
 	}
 }

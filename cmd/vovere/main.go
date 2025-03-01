@@ -10,8 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -286,91 +284,20 @@ func main() {
 
 		// API tag route for HTMX
 		r.Get("/api/tags/{tag}", func(w http.ResponseWriter, r *http.Request) {
-			tag := chi.URLParam(r, "tag")
+			// Get repository and create an item handler
 			repo := services.RepositoryFromContext(r.Context())
+			tag := chi.URLParam(r, "tag")
 
-			// Instead of trying to route through the ItemHandler,
-			// let's directly implement the tag items listing here
-			tagItems, err := services.NewTagService(repo).GetItemsByTag(tag)
-			if err != nil {
-				http.Error(w, "Failed to get items for tag: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
+			// Create a new request with adjusted path to match the ItemHandler's route pattern
+			newURL := fmt.Sprintf("/tags/%s", tag)
+			newReq, _ := http.NewRequest(r.Method, newURL, r.Body)
+			// Copy headers and other properties
+			newReq.Header = r.Header
+			newReq = newReq.WithContext(r.Context())
 
-			// Sort items by modified date (newest first)
-			sort.Slice(tagItems, func(i, j int) bool {
-				return tagItems[i].Modified.After(tagItems[j].Modified)
-			})
-
-			// Set content type to HTML
-			w.Header().Set("Content-Type", "text/html")
-
-			// Render the items list in HTML format
-			fmt.Fprintf(w, `
-			<div class="flex justify-between items-center mb-6">
-				<h1 class="text-2xl font-bold class-page-title">Items tagged #%s</h1>
-			</div>
-			<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden class-items-list">
-				<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-					<thead class="bg-gray-50 dark:bg-gray-900">
-						<tr>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 50%%;">Title</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 20%%;">Type</th>
-							<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 20%%;">Modified</th>
-						</tr>
-					</thead>
-					<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 class-items-rows">`, tag)
-
-			if len(tagItems) == 0 {
-				fmt.Fprintf(w, `
-				<tr>
-					<td colspan="3" class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500 dark:text-gray-400">
-						No items found with tag #%s.
-					</td>
-				</tr>
-				`, tag)
-			}
-
-			for _, item := range tagItems {
-				title := item.Title
-				if title == "" {
-					title = item.ID
-				}
-
-				fmt.Fprintf(w, `
-				<tr class="hover:bg-gray-50 dark:hover:bg-gray-700 class-item-row">
-					<td class="px-6 py-4 whitespace-nowrap">
-						<a 
-							href="/items/%s/%s"
-							class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 class-item-title"
-							hx-get="/api/items/%s/%s"
-							hx-target="#content"
-							hx-swap="innerHTML"
-							hx-push-url="/items/%s/%s"
-						>%s</a>
-					</td>
-					<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 class-item-type">
-						%s
-					</td>
-					<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 class-item-modified">
-						%s
-					</td>
-				</tr>`,
-					item.Type, item.ID,
-					item.Type, item.ID,
-					item.Type, item.ID,
-					title,
-					strings.Title(string(item.Type)),
-					item.Modified.Format("Jan 2, 2006 3:04 PM"),
-				)
-			}
-
-			// Close table and container
-			fmt.Fprint(w, `
-					</tbody>
-				</table>
-			</div>
-			`)
+			// Use the item handler directly
+			itemHandler := handlers.NewItemHandler(repo)
+			itemHandler.Routes().ServeHTTP(w, newReq)
 		})
 
 		// Tags route - Main tags page

@@ -3,13 +3,17 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/ast"
 	"github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
 
@@ -19,13 +23,15 @@ import (
 
 // ItemHandler handles HTTP requests for items
 type ItemHandler struct {
-	repo *services.Repository
+	repo       *services.Repository
+	tagService *services.TagService
 }
 
 // NewItemHandler creates a new item handler
 func NewItemHandler(repo *services.Repository) *ItemHandler {
 	return &ItemHandler{
-		repo: repo,
+		repo:       repo,
+		tagService: services.NewTagService(repo),
 	}
 }
 
@@ -64,7 +70,7 @@ func extractTitleFromContent(content string, itemType models.ItemType) string {
 	return ""
 }
 
-// renderMarkdown converts markdown to HTML
+// renderMarkdown converts markdown to HTML and processes hashtags
 func renderMarkdown(md string) string {
 	// Create markdown parser with extensions
 	extensions := parser.CommonExtensions | parser.AutoHeadingIDs
@@ -73,9 +79,52 @@ func renderMarkdown(md string) string {
 	// Parse the markdown document
 	doc := p.Parse([]byte(md))
 
-	// Set up HTML renderer with options
+	// Set up custom HTML renderer with options
 	htmlFlags := html.CommonFlags | html.HrefTargetBlank
-	opts := html.RendererOptions{Flags: htmlFlags}
+	opts := html.RendererOptions{
+		Flags: htmlFlags,
+		RenderNodeHook: func(w io.Writer, node ast.Node, entering bool) (ast.WalkStatus, bool) {
+			if txtNode, ok := node.(*ast.Text); ok && entering {
+				// Process text nodes to find and convert hashtags
+				text := string(txtNode.Literal)
+				if !strings.Contains(text, "#") {
+					return ast.GoToNext, false
+				}
+
+				// Skip hashtag processing for nodes within code contexts
+				// Check if any parent is a code block or code span
+				parent := node.GetParent()
+				for parent != nil {
+					switch parent.(type) {
+					case *ast.CodeBlock, *ast.Code, *ast.Link:
+						// Don't process hashtags in code blocks, inline code, or links
+						return ast.GoToNext, false
+					default:
+						parent = parent.GetParent()
+					}
+				}
+
+				// Regex to match hashtags with letters, numbers, dots, and underscores
+				// Ensures hashtag is not inside a URL or part of another word
+				tagRegex := regexp.MustCompile(`\B(#[a-zA-Z0-9_\.]+)\b`)
+
+				// Replace hashtags with links
+				processed := tagRegex.ReplaceAllStringFunc(text, func(match string) string {
+					// Extract the hashtag without the leading #
+					tag := match[1:]
+					// Create a link to the tag page
+					return fmt.Sprintf(`<a href="/tags/%s" class="tag-link">%s</a>`,
+						tag, match)
+				})
+
+				if processed != text {
+					io.WriteString(w, processed)
+					return ast.GoToNext, true
+				}
+			}
+			return ast.GoToNext, false
+		},
+	}
 	renderer := html.NewRenderer(opts)
 
 	// Render to HTML
@@ -92,6 +141,7 @@ func (h *ItemHandler) Routes() chi.Router {
 	r.Get("/{type}/{id}/edit", h.editItem)
 	r.Put("/{type}/{id}/content", h.updateContent)
 	r.Delete("/{type}/{id}", h.deleteItem)
+	r.Get("/tags/{tag}", h.listItemsByTag)
 
 	return r
 }
@@ -107,9 +157,22 @@ func (h *ItemHandler) deleteItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Store the previous tags before deletion
+	previousTags := make([]string, len(item.Tags))
+	copy(previousTags, item.Tags)
+
+	// Delete the item
 	if err := h.repo.DeleteItem(item); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Update tag associations - since the item is deleted, pass empty tags list
+	// This will effectively remove the item from all its previous tags
+	item.Tags = []string{} // Clear tags since item is deleted
+	if err := h.tagService.UpdateItemTags(item, previousTags); err != nil {
+		// Just log the error, don't fail the deletion
+		log.Printf("Error updating tags after deletion: %v", err)
 	}
 
 	// Redirect back to list view
@@ -479,6 +542,21 @@ func (h *ItemHandler) updateContent(w http.ResponseWriter, r *http.Request) {
 		shouldRedirect = r.FormValue("redirect") == "true"
 	}
 
+	// Extract hashtags from content
+	previousTags := item.Tags
+	extractedTags := h.tagService.ExtractTags(content)
+
+	// Update item tags
+	if len(extractedTags) > 0 || len(previousTags) > 0 {
+		item.Tags = extractedTags
+
+		// Update tag indices
+		if err := h.tagService.UpdateItemTags(item, previousTags); err != nil {
+			http.Error(w, "Failed to update tag indices: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	// Generate title from content
 	if itemType == models.TypeNote {
 		// For notes, we'll always try to extract the title from content
@@ -515,10 +593,38 @@ func (h *ItemHandler) updateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Trigger tag update event if tags have changed
+	if !stringSlicesEqual(previousTags, item.Tags) {
+		// Tags have changed, but we no longer need to trigger an event
+		// The user will need to refresh the page to see updated tags
+	}
+
 	// For JSON/HTMX requests, return JSON response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"id":"%s","title":"%s"}`, item.ID, item.Title)
+}
+
+// stringSlicesEqual checks if two string slices are equal
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Create maps for faster lookup
+	mapA := make(map[string]bool)
+	for _, val := range a {
+		mapA[val] = true
+	}
+
+	// Check if all elements in b are in a
+	for _, val := range b {
+		if !mapA[val] {
+			return false
+		}
+	}
+
+	return true
 }
 
 // editItem shows the editor for an item
@@ -640,4 +746,111 @@ func (h *ItemHandler) editItem(w http.ResponseWriter, r *http.Request) {
 		itemType, item.ID,
 		content,
 	)
+}
+
+// listItemsByTag returns a list of items with a specific tag
+func (h *ItemHandler) listItemsByTag(w http.ResponseWriter, r *http.Request) {
+	tag := chi.URLParam(r, "tag")
+	if tag == "" {
+		http.Error(w, "Tag is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get items for this tag
+	items, err := h.tagService.GetItemsByTag(tag)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Sort items by modified date (newest first)
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Modified.After(items[j].Modified)
+	})
+
+	// Breadcrumb for tag view
+	breadcrumb := fmt.Sprintf(`
+		<a href="/" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 flex-shrink-0 inline-flex items-center" hx-boost="true">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+            </svg>
+        </a>
+		<span class="text-gray-500 dark:text-gray-400 flex-shrink-0">/</span>
+		<span class="text-gray-600 dark:text-gray-300">tag</span>
+		<span class="text-gray-500 dark:text-gray-400 flex-shrink-0">/</span>
+		<span class="text-gray-600 dark:text-gray-300">#%s</span>
+	`, tag)
+
+	w.Header().Set("Content-Type", "text/html")
+
+	// Update breadcrumb via HTMX
+	fmt.Fprintf(w, `<div hx-swap-oob="innerHTML:#breadcrumb" class="flex items-center gap-2">%s</div>`, breadcrumb)
+
+	// Table header that matches the design with title
+	fmt.Fprintf(w, `
+	<div class="flex justify-between items-center mb-6">
+		<h1 class="text-2xl font-bold class-page-title">Items tagged #%s</h1>
+	</div>
+	<div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden class-items-list">
+		<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+			<thead class="bg-gray-50 dark:bg-gray-900">
+				<tr>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 50%%;">Title</th>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 20%%;">Type</th>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider" style="width: 20%%;">Modified</th>
+				</tr>
+			</thead>
+			<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 class-items-rows">
+	`, tag)
+
+	if len(items) == 0 {
+		fmt.Fprintf(w, `
+		<tr>
+			<td colspan="3" class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500 dark:text-gray-400">
+				No items found with tag #%s.
+			</td>
+		</tr>
+		`, tag)
+	}
+
+	for _, item := range items {
+		title := item.Title
+		if title == "" {
+			title = item.ID
+		}
+
+		fmt.Fprintf(w, `
+		<tr class="hover:bg-gray-50 dark:hover:bg-gray-700 class-item-row">
+			<td class="px-6 py-4 whitespace-nowrap">
+				<a 
+					href="/items/%s/%s"
+					class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 class-item-title"
+					hx-get="/api/items/%s/%s"
+					hx-target="#content"
+					hx-swap="innerHTML"
+					hx-push-url="/items/%s/%s"
+				>%s</a>
+			</td>
+			<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 class-item-type">
+				%s
+			</td>
+			<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 class-item-modified">
+				%s
+			</td>
+		</tr>`,
+			item.Type, item.ID,
+			item.Type, item.ID,
+			item.Type, item.ID,
+			title,
+			strings.Title(string(item.Type)),
+			item.Modified.Format("Jan 2, 2006 3:04 PM"),
+		)
+	}
+
+	// Close table and container
+	fmt.Fprint(w, `
+			</tbody>
+		</table>
+	</div>
+	`)
 }
