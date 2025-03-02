@@ -3,22 +3,17 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gomarkdown/markdown"
-	"github.com/gomarkdown/markdown/ast"
-	"github.com/gomarkdown/markdown/html"
-	"github.com/gomarkdown/markdown/parser"
 
 	"vovere/internal/app/models"
 	"vovere/internal/app/services"
+	md "vovere/internal/markdown"
 )
 
 // ItemHandler handles HTTP requests for items
@@ -35,101 +30,9 @@ func NewItemHandler(repo *services.Repository) *ItemHandler {
 	}
 }
 
-// extractTitleFromContent extracts the title from content
-func extractTitleFromContent(content string, itemType models.ItemType) string {
-	if content == "" {
-		return ""
-	}
+// extractTitleFromContent is now provided by the markdown package
 
-	// For notes, try to extract the first H1 header
-	if itemType == models.TypeNote {
-		// Look for # Header or === underlined header
-		h1Regex := regexp.MustCompile(`(?m)^#\s+(.+)$|^([^\n]+)\n===+\s*$`)
-		if matches := h1Regex.FindStringSubmatch(content); len(matches) > 0 {
-			for i := 1; i < len(matches); i++ {
-				if matches[i] != "" {
-					return strings.TrimSpace(matches[i])
-				}
-			}
-		}
-	}
-
-	// Default: use first line
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			// Return first non-empty line, truncate if needed
-			if len(line) > 50 {
-				return line[:47] + "..."
-			}
-			return line
-		}
-	}
-
-	return ""
-}
-
-// renderMarkdown converts markdown to HTML and processes hashtags
-func renderMarkdown(md string) string {
-	// Create markdown parser with extensions
-	extensions := parser.CommonExtensions | parser.AutoHeadingIDs
-	p := parser.NewWithExtensions(extensions)
-
-	// Parse the markdown document
-	doc := p.Parse([]byte(md))
-
-	// Set up custom HTML renderer with options
-	htmlFlags := html.CommonFlags | html.HrefTargetBlank
-	opts := html.RendererOptions{
-		Flags: htmlFlags,
-		RenderNodeHook: func(w io.Writer, node ast.Node, entering bool) (ast.WalkStatus, bool) {
-			if txtNode, ok := node.(*ast.Text); ok && entering {
-				// Process text nodes to find and convert hashtags
-				text := string(txtNode.Literal)
-				if !strings.Contains(text, "#") {
-					return ast.GoToNext, false
-				}
-
-				// Skip hashtag processing for nodes within code contexts
-				// Check if any parent is a code block or code span
-				parent := node.GetParent()
-				for parent != nil {
-					switch parent.(type) {
-					case *ast.CodeBlock, *ast.Code, *ast.Link:
-						// Don't process hashtags in code blocks, inline code, or links
-						return ast.GoToNext, false
-					default:
-						parent = parent.GetParent()
-					}
-				}
-
-				// Regex to match hashtags with letters, numbers, dots, and underscores
-				// Ensures hashtag is not inside a URL or part of another word
-				tagRegex := regexp.MustCompile(`\B(#[a-zA-Z0-9_\.]+)\b`)
-
-				// Replace hashtags with links
-				processed := tagRegex.ReplaceAllStringFunc(text, func(match string) string {
-					// Extract the hashtag without the leading #
-					tag := match[1:]
-					// Create a link to the tag page
-					return fmt.Sprintf(`<a href="/tags/%s" class="tag-link">%s</a>`,
-						tag, match)
-				})
-
-				if processed != text {
-					io.WriteString(w, processed)
-					return ast.GoToNext, true
-				}
-			}
-			return ast.GoToNext, false
-		},
-	}
-	renderer := html.NewRenderer(opts)
-
-	// Render to HTML
-	return string(markdown.Render(doc, renderer))
-}
+// renderMarkdown is now provided by the markdown package
 
 // Routes returns the router for item endpoints
 func (h *ItemHandler) Routes() chi.Router {
@@ -193,7 +96,7 @@ func (h *ItemHandler) viewItem(w http.ResponseWriter, r *http.Request) {
 
 	// If the item doesn't have a title, extract it
 	if item.Title == "" {
-		item.Title = extractTitleFromContent(content, itemType)
+		item.Title = md.ExtractTitleFromContent(content, string(itemType))
 		if item.Title == "" {
 			item.Title = item.ID
 		}
@@ -217,7 +120,7 @@ func (h *ItemHandler) viewItem(w http.ResponseWriter, r *http.Request) {
 	`, itemType, strings.Title(string(itemType)), item.Title)
 
 	// Generate HTML
-	contentHTML := renderMarkdown(content)
+	contentHTML := md.Render(content)
 
 	// Format tags
 	tags := "None"
@@ -417,10 +320,12 @@ func (h *ItemHandler) listItems(w http.ResponseWriter, r *http.Request) {
 		if title == "" {
 			_, rawContent, err := h.repo.LoadItem(item.ID, itemType)
 			if err == nil {
-				title = extractTitleFromContent(rawContent, itemType)
-				// Save the title for future use
-				item.Title = title
-				h.repo.SaveItem(item, "")
+				title = md.ExtractTitleFromContent(rawContent, string(itemType))
+				// Update metadata if title was extracted
+				if title != "" {
+					item.Title = title
+					h.repo.SaveItem(item, "")
+				}
 			}
 		}
 
@@ -557,22 +462,11 @@ func (h *ItemHandler) updateContent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Generate title from content
-	if itemType == models.TypeNote {
-		// For notes, we'll always try to extract the title from content
-		newTitle := extractTitleFromContent(content, itemType)
-		if newTitle != "" {
-			item.Title = newTitle
-		}
-	} else {
-		// For other item types, only set title if it's currently empty
-		if item.Title == "" {
-			item.Title = extractTitleFromContent(content, itemType)
-		}
-	}
-
-	if item.Title == "" {
-		item.Title = item.ID
+	// Auto-update title from content if needed
+	newTitle := md.ExtractTitleFromContent(content, string(itemType))
+	if newTitle != "" && (item.Title == "" || item.Title == item.ID) {
+		item.Title = newTitle
+		h.repo.SaveItem(item, "")
 	}
 
 	// Update modification time

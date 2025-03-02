@@ -9,6 +9,7 @@ import (
 
 	"vovere/internal/app/models"
 	"vovere/internal/app/services"
+	md "vovere/internal/markdown"
 )
 
 // DashboardHandler handles dashboard-related functionality
@@ -107,7 +108,7 @@ func (h *DashboardHandler) getRecentItems(w http.ResponseWriter, r *http.Request
 		if title == "" {
 			_, content, err := h.repo.LoadItem(item.ID, item.Type)
 			if err == nil {
-				title = extractTitleFromContent(content, item.Type)
+				title = md.ExtractTitleFromContent(content, string(item.Type))
 				// Save the extracted title
 				if title != "" {
 					item.Title = title
